@@ -1,0 +1,51 @@
+{
+  "name": "@opuu/epml-escpos",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "An XML-style templating language compiler for ESC/POS thermal printers. Transform markup templates and JSON data into raw byte arrays.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "dev": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opuu/epml-escpos.git"
+  },
+  "homepage": "https://github.com/opuu/epml-escpos#readme",
+  "bugs": {
+    "url": "https://github.com/opuu/epml-escpos/issues"
+  },
+  "keywords": [
+    "escpos",
+    "esc-pos",
+    "epml",
+    "thermal-printer",
+    "receipt",
+    "pos",
+    "markup",
+    "compiler",
+    "printer",
+    "barcode",
+    "qrcode"
+  ],
+  "author": "opuu",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}
