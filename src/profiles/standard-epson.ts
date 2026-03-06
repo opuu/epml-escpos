@@ -1,180 +1,142 @@
-import { PrinterProfile } from "./types";
+import { PrinterProfile } from "./types.js";
+import {
+  CommandMap,
+  Barcode1DType,
+  QRErrorLevel,
+  PDF417Params,
+  NVImageMode,
+} from "../plugin.js";
+import * as CMD from "../commands/index.js";
+
+const EMPTY_BYTES = new Uint8Array();
 
 export const StandardEpsonProfile: PrinterProfile = {
+  name: "Standard Epson",
+  supportedCharsets: [
+    "PC437",
+    "PC850",
+    "PC858",
+    "PC860",
+    "PC863",
+    "PC865",
+    "WPC1252",
+    "UTF8",
+  ],
   commands: {
-    initialization: [0x1b, 0x40], // ESC @
+    init: new Uint8Array(CMD.INIT),
+
     text: {
-      bold: {
-        on: [0x1b, 0x45, 0x01], // ESC E n
-        off: [0x1b, 0x45, 0x00],
-      },
-      underline: {
-        on: [0x1b, 0x2d, 0x01], // ESC - n
-        off: [0x1b, 0x2d, 0x00],
-      },
-      invert: {
-        on: [0x1d, 0x42, 0x01], // GS B n
-        off: [0x1d, 0x42, 0x00],
-      },
-      family: {
-        a: [0x1b, 0x4d, 0x00], // ESC M 0
-        b: [0x1b, 0x4d, 0x01], // ESC M 1
-      },
-      size: (width: number, height: number) => {
-        // epson uses a single n for both width & height where format is (width-1)*16 + (height-1)
-        const w = Math.max(1, Math.min(8, width)) - 1;
-        const h = Math.max(1, Math.min(8, height)) - 1;
-        const n = w * 16 + h;
-        return [0x1d, 0x21, n]; // GS ! n
-      },
-      strike: {
-        on: [0x1b, 0x47, 0x01], // ESC G n
-        off: [0x1b, 0x47, 0x00],
-      },
-      color: {
-        black: [0x1b, 0x72, 0x00], // ESC r 0
-        red: [0x1b, 0x72, 0x01], // ESC r 1
-      },
-      rotate: {
-        on: [0x1b, 0x56, 0x01], // ESC V 1
-        off: [0x1b, 0x56, 0x00],
-      },
-      upsideDown: {
-        on: [0x1b, 0x7b, 0x01], // ESC { 1
-        off: [0x1b, 0x7b, 0x00],
-      },
+      boldOn: new Uint8Array(CMD.TEXT.BOLD.on),
+      boldOff: new Uint8Array(CMD.TEXT.BOLD.off),
+      underlineOn: new Uint8Array(CMD.TEXT.UNDERLINE.on),
+      underlineOff: new Uint8Array(CMD.TEXT.UNDERLINE.off),
+      strikeOn: EMPTY_BYTES,
+      strikeOff: EMPTY_BYTES,
+      invertOn: new Uint8Array(CMD.TEXT.INVERT.on),
+      invertOff: new Uint8Array(CMD.TEXT.INVERT.off),
+      rotateOn: new Uint8Array(CMD.TEXT.ROTATE.on),
+      rotateOff: new Uint8Array(CMD.TEXT.ROTATE.off),
+      upsideDownOn: new Uint8Array(CMD.TEXT.UPSIDE_DOWN.on),
+      upsideDownOff: new Uint8Array(CMD.TEXT.UPSIDE_DOWN.off),
+      smoothingOn: new Uint8Array(CMD.TEXT.SMOOTHING.on),
+      smoothingOff: new Uint8Array(CMD.TEXT.SMOOTHING.off),
+      size: (sx: number, sy: number) => new Uint8Array(CMD.TEXT.SIZE(sx, sy)),
+      color: null,
+      charset: (cp: number) => new Uint8Array(CMD.CHARSET.setPage(cp)),
+      font: (f: "a" | "b") => new Uint8Array(CMD.TEXT.FONT[f]),
     },
-    align: {
-      left: [0x1b, 0x61, 0x00],
-      center: [0x1b, 0x61, 0x01],
-      right: [0x1b, 0x61, 0x02],
+
+    alignment: {
+      left: new Uint8Array(CMD.TEXT.ALIGN.left),
+      center: new Uint8Array(CMD.TEXT.ALIGN.center),
+      right: new Uint8Array(CMD.TEXT.ALIGN.right),
     },
+
     layout: {
-      newline: [0x0a], // LF
-      feed: (lines: number) => [0x1b, 0x64, lines], // ESC d n
-      spacing: {
-        default: [0x1b, 0x32], // ESC 2
-        set: (dots: number) => [0x1b, 0x33, Math.max(0, Math.min(255, dots))], // ESC 3 n
-      },
+      feedLines: (n: number) => new Uint8Array(CMD.LAYOUT.FEED.LINES(n)),
+      feedDots: (n: number) => new Uint8Array(CMD.LAYOUT.FEED.DOTS(n)),
+      feedReverse: null,
+      lineSpacing: (n: number) =>
+        new Uint8Array(CMD.LAYOUT.LINE_SPACING.set(n)),
+      defaultSpacing: new Uint8Array(CMD.LAYOUT.LINE_SPACING.default),
+      leftMargin: (n: number) => new Uint8Array(CMD.LAYOUT.LEFT_MARGIN.set(n)),
+      printWidth: (n: number) => new Uint8Array(CMD.LAYOUT.PRINT_WIDTH.set(n)),
+      motionUnits: (x: number, y: number) =>
+        new Uint8Array(CMD.LAYOUT.MOTION_UNITS.set(x, y)),
+      absolutePos: (n: number) =>
+        new Uint8Array(CMD.LAYOUT.ABSOLUTE_POSITION.set(n)),
+      relativePos: (n: number) =>
+        new Uint8Array(CMD.LAYOUT.RELATIVE_POSITION.set(n)),
+      pageModeOn: new Uint8Array(CMD.LAYOUT.PAGE_MODE.on),
+      pageModeOff: new Uint8Array(CMD.LAYOUT.PAGE_MODE.off),
+      printArea: (x: number, y: number, w: number, h: number) =>
+        new Uint8Array(CMD.LAYOUT.PRINT_AREA.set(x, y, w, h)),
+      printDirection: (dir: 0 | 1 | 2 | 3) =>
+        new Uint8Array(CMD.LAYOUT.PRINT_DIRECTION.set(dir)),
     },
+
     hardware: {
-      cut: {
-        full: [0x1d, 0x56, 0x00], // GS V 0
-        partial: [0x1d, 0x56, 0x01], // GS V 1
+      cutFull: new Uint8Array(CMD.HARDWARE.CUT.FULL()),
+      cutPartial: new Uint8Array(CMD.HARDWARE.CUT.PARTIAL()),
+      cutFullFeed: (n: number) => new Uint8Array(CMD.HARDWARE.CUT.FULL(n)),
+      cutPartialFeed: (n: number) =>
+        new Uint8Array(CMD.HARDWARE.CUT.PARTIAL(n)),
+      drawerPin2: (on: number, off: number) =>
+        new Uint8Array(CMD.HARDWARE.DRAWER.PIN2(on, off)),
+      drawerPin5: (on: number, off: number) =>
+        new Uint8Array(CMD.HARDWARE.DRAWER.PIN5(on, off)),
+      beep: (count: number, durationMs: number) =>
+        new Uint8Array(CMD.HARDWARE.BEEP.EPSON(count)),
+      density: null,
+      printSpeed: null,
+      eject: null,
+      realtimeStatus: new Uint8Array(CMD.HARDWARE.REALTIME_STATUS.set(1)),
+    },
+
+    barcodes: {
+      hri: (pos: "none" | "above" | "below" | "both") => {
+        const p =
+          pos === "none" ? 0 : pos === "above" ? 1 : pos === "below" ? 2 : 3;
+        return new Uint8Array(CMD.BARCODES.HRI.set(p));
       },
-      drawer: {
-        pin2: [0x1b, 0x70, 0x00, 0x32, 0x32], // ESC p 0
-        pin5: [0x1b, 0x70, 0x01, 0x32, 0x32], // ESC p 1
-      },
-      beep: (count: number, durationMS: number) => {
-        const durVal = Math.max(1, Math.floor(durationMS / 50));
-        return [0x1b, 0x42, count, durVal]; // ESC B n t
-      },
-      barcode: (
-        type: string,
-        data: string,
-        width: number,
-        height: number,
-        textPosition: string,
-        textFont: string,
-      ) => {
-        let typeCode = 73; // CODE128 default
-        const upperType = type.toUpperCase();
-        if (upperType === "UPCA") typeCode = 65;
-        if (upperType === "UPCE") typeCode = 66;
-        if (upperType === "EAN13") typeCode = 67;
-        if (upperType === "EAN8") typeCode = 68;
-        if (upperType === "CODE39") typeCode = 69;
-        if (upperType === "ITF") typeCode = 70;
-        if (upperType === "CODABAR") typeCode = 71;
-        if (upperType === "CODE93") typeCode = 72;
-        if (upperType === "CODE128") typeCode = 73;
+      hriFont: (font: "a" | "b") =>
+        new Uint8Array(CMD.BARCODES.HRI_FONT.set(font)),
+      height: (dots: number) => new Uint8Array(CMD.BARCODES.HEIGHT.set(dots)),
+      width: (module: number) => new Uint8Array(CMD.BARCODES.WIDTH.set(module)),
+      print1d: (type: Barcode1DType, data: string) =>
+        new Uint8Array(CMD.BARCODES.PRINT(type, data)),
+      printQr: (data: string, size: number, errorLevel: QRErrorLevel) =>
+        new Uint8Array(CMD.BARCODES.QR(size, errorLevel, data)),
+      printPdf417: (data: string, params: PDF417Params) =>
+        new Uint8Array(
+          CMD.BARCODES.PDF417(
+            params.cols,
+            params.rows,
+            params.error,
+            params.truncated,
+            data,
+          ),
+        ),
+      printDataMatrix: (data: string) =>
+        new Uint8Array(CMD.BARCODES.DATAMATRIX(data)),
+      printMaxicode: null,
+    },
 
-        const bytes: number[] = [];
-
-        // HRI Position (0: None, 1: Above, 2: Below, 3: Both)
-        let pos = 0;
-        if (textPosition === "above") pos = 1;
-        if (textPosition === "below") pos = 2;
-        if (textPosition === "both") pos = 3;
-        bytes.push(0x1d, 0x48, pos); // GS H n
-
-        // HRI Font (0: Font A, 1: Font B)
-        const fontCode = textFont === "b" ? 1 : 0;
-        bytes.push(0x1d, 0x66, fontCode); // GS f n
-
-        bytes.push(0x1d, 0x77, Math.max(2, Math.min(6, width))); // GS w n
-        bytes.push(0x1d, 0x68, Math.max(1, Math.min(255, height))); // GS h n
-
-        if (typeCode === 73) {
-          // CODE128 requires character set select '{B' (123, 66)
-          bytes.push(0x1d, 0x6b, typeCode, data.length + 2);
-          bytes.push(123, 66);
-          for (let i = 0; i < data.length; i++) {
-            bytes.push(data.charCodeAt(i));
-          }
-        } else {
-          bytes.push(0x1d, 0x6b, typeCode, data.length); // GS k m n
-          for (let i = 0; i < data.length; i++) {
-            bytes.push(data.charCodeAt(i));
-          }
-        }
-
-        return bytes;
-      },
-      qr: (data: string, size: number, errorCorrection: string) => {
-        const bytes: number[] = [];
-        let errLvl = 48; // 'L'
-        const upperErr = errorCorrection.toUpperCase();
-        if (upperErr === "M") errLvl = 49;
-        if (upperErr === "Q") errLvl = 50;
-        if (upperErr === "H") errLvl = 51;
-
-        const sz = Math.max(1, Math.min(16, size));
-        const len = data.length + 3;
-        const pL = len & 0xff;
-        const pH = (len >> 8) & 0xff;
-
-        // Model 2
-        bytes.push(0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00);
-        // Size
-        bytes.push(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, sz);
-        // Error Correction
-        bytes.push(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, errLvl);
-        // Store Data
-        bytes.push(0x1d, 0x28, 0x6b, pL, pH, 0x31, 0x50, 0x30);
-        for (let i = 0; i < data.length; i++) {
-          bytes.push(data.charCodeAt(i));
-        }
-        // Print
-        bytes.push(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30);
-
-        return bytes;
-      },
-      density: (level: number) => {
-        // level: 0–15 (70%–130%). GS ( E pL pH fn m
-        // Function 10: set print density
-        const n = Math.max(0, Math.min(15, level));
-        return [0x1d, 0x28, 0x45, 0x02, 0x00, 0x0a, n];
-      },
-      image: (width: number, height: number, data: Uint8Array) => {
-        const bytes: number[] = [];
-        const widthInBytes = Math.ceil(width / 8);
-        const expectedLen = widthInBytes * height;
-        const xL = widthInBytes & 0xff;
-        const xH = (widthInBytes >> 8) & 0xff;
-        const yL = height & 0xff;
-        const yH = (height >> 8) & 0xff;
-
-        // GS v 0 m xL xH yL yH d1...dk
-        // m=0: normal mode
-        bytes.push(0x1d, 0x76, 0x30, 0x00, xL, xH, yL, yH);
-
-        // Ensure data length matches exactly what the command header declares
-        for (let i = 0; i < expectedLen; i++) {
-          bytes.push(i < data.length ? data[i] : 0x00);
-        }
-        return bytes;
+    images: {
+      raster: (data: Uint8Array, width: number, height: number) =>
+        new Uint8Array(CMD.IMAGES.raster(width, height, data)),
+      column: (data: Uint8Array, width: number, height: number) =>
+        new Uint8Array(CMD.IMAGES.column(width, height, data)),
+      nvPrint: (slot: number, mode: NVImageMode) => {
+        const m =
+          mode === "normal"
+            ? 0
+            : mode === "double-width"
+              ? 1
+              : mode === "double-height"
+                ? 2
+                : 3;
+        return new Uint8Array(CMD.IMAGES.nvImage(slot, m));
       },
     },
   },

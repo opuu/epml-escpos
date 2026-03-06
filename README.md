@@ -1,23 +1,20 @@
-# @opuu/epml-escpos
+# EPML ESC/POS Markup Language
 
-<p align="left">
-  <img src="https://img.shields.io/npm/v/@opuu/epml-escpos" alt="NPM Version" />
-  <img src="https://img.shields.io/badge/license-MIT-blue" alt="License" />
-  <img src="https://img.shields.io/badge/zero-dependencies-brightgreen" alt="Zero Dependencies" />
-</p>
-
-A compiler for **EPML (ESC/POS Markup Language)** — an XML-style templating language for thermal printers. Write expressive markup, feed JSON data, and get raw ESC/POS byte arrays ready to send to hardware.
+`@opuu/epml-escpos` is an XML-like template compiler for thermal receipt printers.
+It transforms EPML templates plus JSON data into raw ESC/POS bytes (`Uint8Array`).
 
 ## Features
 
-- **XML-style templating** — Intuitive tags for text formatting, alignment, tables, and hardware commands
-- **Variable interpolation** — Handlebars-style `{{ variable.path }}` syntax with deep path resolution
-- **Control flow** — `<for>` loops and `<if>`/`<else>` conditional rendering
-- **Table layout** — `<row>`/`<col>` with percentage widths and column alignment
-- **Barcode & QR codes** — CODE128, EAN13, QR and more with configurable parameters
-- **Image support** — Async image rendering pipeline with pluggable rasterizer
-- **Printer profiles** — Pluggable command profiles for Epson, Star Micronics, and custom hardware
-- **Zero dependencies** — Pure TypeScript, no runtime dependencies
+- XML-style receipt templates
+- Variable interpolation with dot-paths (`{{ order.total }}`)
+- Control flow: `<for>`, `<if>`, `<else/>`
+- Universal text styling attributes (bold, underline, invert, size, align, etc.)
+- Layout helpers: `<row>`, `<cell>`, `<hr/>`, `<feed/>`
+- Barcode support: 1D, QR, PDF417
+- Async image rendering from file path, URL, or data URL
+- Printer profiles (Standard Epson, Star Micronics ESC/POS mode)
+- Plugin system for overriding command bytes per printer family
+- Structured warnings and typed error classes
 
 ## Installation
 
@@ -25,201 +22,274 @@ A compiler for **EPML (ESC/POS Markup Language)** — an XML-style templating la
 npm install @opuu/epml-escpos
 ```
 
-## Quick Start
+## Quick Start (Synchronous)
 
-```typescript
+Use `compile()` when your template does not contain `<image>`.
+
+```ts
 import { EPMLCompiler } from "@opuu/epml-escpos";
 
 const template = `
-<receipt width="48">
-  <center><b>My Coffee Shop</b></center>
-  <br/>
-  <left>Hello, {{ customer.name }}!</left>
+<receipt width="48" init="true">
+  <text align="center" bold size="2">MY STORE</text>
   <hr/>
   <row>
-    <col width="50%">Americano</col>
-    <col width="50%" align="right">$3.50</col>
+    <cell width="70%">Coffee</cell>
+    <cell width="30%" align="right">$3.50</cell>
   </row>
-  <feed lines="3"/>
+  <row>
+    <cell width="70%" bold>TOTAL</cell>
+    <cell width="30%" align="right" bold>$3.50</cell>
+  </row>
+  <feed lines="2"/>
   <cut mode="partial"/>
-  <open-drawer pin="2"/>
 </receipt>
 `;
 
-const data = {
-  customer: { name: "Jane Doe" },
-};
+const data = {};
+const result = EPMLCompiler.compile(template, data);
 
-const receiptBytes = EPMLCompiler.compile(template, data);
-// receiptBytes is a Uint8Array ready to send to your printer transport
+// Raw ESC/POS bytes
+const bytes: Uint8Array = result.bytes;
+
+// Non-fatal warnings (e.g. unsupported capability in selected profile)
+console.log(result.warnings);
 ```
 
-## Async Compilation (Images)
+## Quick Start (Asynchronous + Images)
 
-To include images, use `compileAsync` with a renderer callback that fetches and dithers images into 1-bit raster data:
+`<image>` requires `compileAsync()`.
 
-```typescript
+```ts
 import { EPMLCompiler } from "@opuu/epml-escpos";
 
 const template = `
-<receipt width="48">
-  <center>
-    <image width="200">/logo.png</image>
-  </center>
-  <cut/>
+<receipt width="48" init="true">
+  <text align="center">Logo</text>
+  <image width="200" dither="floyd-steinberg">https://example.com/logo.png</image>
+  <feed lines="2"/>
+  <cut mode="full"/>
 </receipt>
 `;
 
-const bytes = await EPMLCompiler.compileAsync(
-  template,
-  {},
-  async (url, targetWidth) => {
-    // Your image loading and dithering logic here
-    // Must return: { data: Uint8Array (1-bit raster), width: number, height: number }
-    return await loadAndDitherImage(url, targetWidth);
-  },
-);
+const result = await EPMLCompiler.compileAsync(template, {});
+const bytes = result.bytes;
 ```
 
-## Custom Printer Profiles
+Image source can be:
 
-Not all printers follow standard Epson ESC/POS. Define a custom profile to override specific commands:
+- local file path
+- `http://` or `https://` URL
+- `data:` URL
 
-```typescript
-import {
-  EPMLCompiler,
-  PrinterProfile,
-  StandardEpsonProfile,
-} from "@opuu/epml-escpos";
+## Sending Bytes to a Network Printer
 
-const MyPrinter: PrinterProfile = {
-  ...StandardEpsonProfile,
+```ts
+import net from "node:net";
+import { EPMLCompiler } from "@opuu/epml-escpos";
+
+const { bytes } = EPMLCompiler.compile(`<text>Hello printer</text>`, {});
+
+const socket = new net.Socket();
+socket.connect(9100, "192.168.1.50", () => {
+  socket.write(Buffer.from(bytes), () => socket.destroy());
+});
+```
+
+## Template Language
+
+### Data Interpolation
+
+Use `{{ path }}` where `path` is dot notation:
+
+- `{{ customer.name }}`
+- `{{ items.0.price }}`
+
+Missing values render as an empty string.
+
+### Control Flow
+
+```xml
+<for item="line" in="cart.items">
+  <row>
+    <cell width="70%">{{ line.name }}</cell>
+    <cell width="30%" align="right">{{ line.price }}</cell>
+  </row>
+</for>
+
+<if condition="customer.isMember">
+  <text bold>MEMBER PRICE APPLIED</text>
+  <else/>
+  <text>Sign up for rewards next time.</text>
+</if>
+```
+
+### Supported Tags
+
+- `<receipt>`
+- `<text>`
+- `<br/>`
+- `<hr/>`
+- `<row>`
+- `<cell>` (alias: `<col>`)
+- `<for>`
+- `<if>` + `<else/>`
+- `<feed/>`
+- `<feed-dots/>`
+- `<feed-reverse/>` (profile-dependent)
+- `<drawer/>` (alias: `<open-drawer>`)
+- `<cut/>`
+- `<barcode>`
+- `<qr>`
+- `<pdf417>`
+- `<image>` (async only)
+- `<nv-image>`
+
+HTML comments are supported and ignored by the lexer (`<!-- comment -->`).
+
+### Universal Text Attributes
+
+These are accepted on text-capable tags such as `<text>`, `<cell>`, `<row>`, and `<receipt>`.
+
+| Attribute | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `align` | `left \| center \| right` | `left` | Text alignment |
+| `bold` | boolean | `false` | |
+| `underline` | boolean | `false` | |
+| `strike` | boolean | `false` | |
+| `invert` | boolean | `false` | White-on-black mode |
+| `rotate` | boolean | `false` | |
+| `upside-down` | boolean | `false` | |
+| `color` | `black \| red` | `black` | Profile-dependent |
+| `font` | `a \| b` | `a` | |
+| `size` | number | `1` | Uniform X/Y scale |
+| `size-x` | number | `1` | Horizontal scale override |
+| `size-y` | number | `1` | Vertical scale override |
+| `charset` | string | - | Must be supported by profile |
+| `smoothing` | boolean | `false` | Profile-dependent |
+| `padding` | boolean | `false` | Fill remaining width with `padding-char` |
+| `full-width` | boolean | `false` | Similar to padding behavior for text blocks |
+| `inline` | boolean | `false` | Prevent automatic trailing LF for `<text>` |
+| `padding-char` | string | space | First byte is used |
+| `padding-top` | number | `0` | Adds filled blank lines before content |
+| `padding-bottom` | number | `0` | Adds filled blank lines after content |
+
+### Tag-Specific Attributes
+
+- `<receipt width="48" init="true">`
+- `<cell width="50%">` or `<cell width="24">`
+- `<feed lines="1"/>`
+- `<feed-dots n="24"/>`
+- `<feed-reverse lines="1"/>`
+- `<drawer pin="2|5" on="50" off="50"/>`
+- `<cut mode="full|partial" feed="0"/>`
+- `<barcode type="CODE128" hri="none|above|below|both" hri-font="a|b" height="50" width="3">...data...</barcode>`
+- `<qr size="3" error="L|M|Q|H">...data...</qr>`
+- `<pdf417 cols="0" rows="0" error="0" truncated="false">...data...</pdf417>`
+- `<image src="..." mode="raster|column" scale="1" dither="threshold|bayer|floyd-steinberg" threshold="128" width="384"/>`
+- `<nv-image n="1" mode="normal|double-width|double-height|quad"/>`
+
+## Profiles
+
+The default profile is `StandardEpsonProfile`.
+
+```ts
+import { EPMLCompiler, StarMicronicsProfile } from "@opuu/epml-escpos";
+
+const result = EPMLCompiler.compile(template, data, StarMicronicsProfile);
+```
+
+Built-in exports:
+
+- `StandardEpsonProfile`
+- `StarMicronicsProfile`
+
+## Plugins
+
+Plugins override selected parts of the active profile command map.
+
+```ts
+import { EPMLCompiler, type EPMLPlugin } from "@opuu/epml-escpos";
+
+const plugin: EPMLPlugin = {
+  name: "my-printer-overrides",
+  version: 1,
   commands: {
-    ...StandardEpsonProfile.commands,
-    hardware: {
-      ...StandardEpsonProfile.commands.hardware,
-      cut: {
-        full: [0x1d, 0x56, 0x41, 0x00],
-        partial: [0x1d, 0x56, 0x42, 0x00],
-      },
+    text: {
+      boldOn: new Uint8Array([0x1b, 0x45, 0x01]),
     },
   },
 };
 
-const bytes = EPMLCompiler.compile(template, data, MyPrinter);
+EPMLCompiler.use(plugin); // global registration
+
+const result = EPMLCompiler.compile("<text bold>Hello</text>", {});
+
+EPMLCompiler.unuse("my-printer-overrides");
 ```
 
-Built-in profiles: `StandardEpsonProfile`, `StarMicronicsProfile`.
+You can also pass local plugins per compile call:
 
-## Tag Reference
-
-### Document
-
-| Tag         | Attributes | Description                                                                 |
-| ----------- | ---------- | --------------------------------------------------------------------------- |
-| `<receipt>` | `width`    | Root element. Sets the character width of the printable area (default: 48). |
-
-### Text Formatting
-
-| Tag             | Attributes                       | Description                                                                                                                                             |
-| --------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<b>`           | —                                | Bold text.                                                                                                                                              |
-| `<u>`           | —                                | Underlined text.                                                                                                                                        |
-| `<strike>`      | —                                | Strikethrough text.                                                                                                                                     |
-| `<i_text>`      | `full-width`, `padding`, `align` | Inverted text (white on black). With `full-width="true"`, fills the entire receipt width. With `padding="true"`, adds blank inverted lines above/below. |
-| `<font>`        | `width`, `height`, `family`      | Text size (1–8) and font family (`a` or `b`).                                                                                                           |
-| `<color>`       | `value`                          | Text color: `"black"` or `"red"` (dual-color printers).                                                                                                 |
-| `<rotate>`      | —                                | 90° clockwise text rotation.                                                                                                                            |
-| `<upside-down>` | —                                | 180° rotated text.                                                                                                                                      |
-
-### Alignment
-
-| Tag        | Description           |
-| ---------- | --------------------- |
-| `<center>` | Center-align content. |
-| `<left>`   | Left-align content.   |
-| `<right>`  | Right-align content.  |
-
-### Layout
-
-| Tag               | Attributes       | Description                                                                        |
-| ----------------- | ---------------- | ---------------------------------------------------------------------------------- |
-| `<br/>`           | —                | Line break.                                                                        |
-| `<hr/>`           | —                | Horizontal rule (dashes filling receipt width).                                    |
-| `<feed>`          | `lines`          | Feed paper by N lines.                                                             |
-| `<line-spacing>`  | `dots`           | Set line spacing in dots for contained elements. Resets when closed.               |
-| `<reset-spacing>` | —                | Manually reset line spacing to default.                                            |
-| `<row>`           | —                | Table row. Must contain `<col>` children.                                          |
-| `<col>`           | `width`, `align` | Table column. Width as `%` or character count. Align: `left` / `center` / `right`. |
-
-### Hardware
-
-| Tag             | Attributes          | Description                                 |
-| --------------- | ------------------- | ------------------------------------------- |
-| `<cut>`         | `mode`              | Paper cut. `"full"` or `"partial"`.         |
-| `<beep>`        | `count`, `duration` | Buzzer beep. Duration in ms.                |
-| `<open-drawer>` | `pin`               | Cash drawer kick pulse. Pin `"2"` or `"5"`. |
-| `<density>`     | `level`             | Print density (0–15).                       |
-
-### Data
-
-| Tag         | Attributes                                              | Description                                                                                          |
-| ----------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `<barcode>` | `type`, `width`, `height`, `text-position`, `text-font` | 1D barcode. Types: `CODE128`, `EAN13`, `EAN8`, `UPCA`, `UPCE`, `CODE39`, `CODE93`, `ITF`, `CODABAR`. |
-| `<qr>`      | `size`, `error`                                         | QR code. Size: 1–16. Error correction: `L` / `M` / `Q` / `H`.                                        |
-| `<image>`   | `width`                                                 | Raster image (requires `compileAsync`).                                                              |
-
-### Control Flow
-
-| Tag      | Attributes   | Description                                                                       |
-| -------- | ------------ | --------------------------------------------------------------------------------- |
-| `<for>`  | `each`, `in` | Loop over a JSON array. `each` names the iterator, `in` references the data path. |
-| `<if>`   | `condition`  | Conditional block. Renders content when the data path is truthy.                  |
-| `<else>` | —            | False branch for the preceding `<if>`.                                            |
-
-### Variables
-
-Use `{{ path.to.value }}` anywhere in text content to interpolate JSON data values. Supports dot-notation for nested objects. Undefined values render as empty strings.
-
-## Architecture
-
-The compiler runs a four-stage pipeline:
-
-```
-Template String → Lexer → Parser → Semantic Analyzer → Code Generator → Uint8Array
-                  tokens    AST     resolved AST         ESC/POS bytes
+```ts
+EPMLCompiler.compile(template, data, undefined, {
+  plugins: [plugin],
+});
 ```
 
-Each stage is independently accessible:
+## API Overview
 
-```typescript
-import {
-  Lexer,
-  Parser,
-  SemanticAnalyzer,
-  CodeGenerator,
-} from "@opuu/epml-escpos";
+### `EPMLCompiler.compile(template, data, profile?, options?)`
 
-const tokens = new Lexer(template).tokenize();
-const ast = new Parser(tokens).parse();
-const resolved = new SemanticAnalyzer(ast, data).analyze();
-const bytes = new CodeGenerator(resolved).generate();
-```
+- Synchronous compilation
+- Returns `CompileResult`
+- Throws on syntax/semantic/codegen/plugin errors
+- Cannot process `<image>` tags
 
-## Error Handling
+### `EPMLCompiler.compileAsync(template, data, imageRendererOrProfile?, profileOrOptions?, maybeOptions?)`
 
-The compiler throws typed errors with line/column information:
+- Asynchronous compilation
+- Supports `<image>` tags
+- Uses built-in rasterizer if you do not provide one
 
-```typescript
-import { EPMLSyntaxError, EPMLSemanticError } from "@opuu/epml-escpos";
+### `CompileResult`
 
-try {
-  EPMLCompiler.compile(template, data);
-} catch (err) {
-  if (err instanceof EPMLSyntaxError) {
-    console.error(`Template error at line ${err.line}: ${err.message}`);
-  }
+```ts
+interface CompileResult {
+  bytes: Uint8Array;
+  warnings: EPMLWarning[];
 }
+```
+
+## Errors and Warnings
+
+Error classes:
+
+- `EPMLError`
+- `EPMLSyntaxError`
+- `EPMLSemanticError`
+- `EPMLCodegenError`
+- `EPMLPluginError`
+
+Warnings are returned in `CompileResult.warnings` and include source stage and optional line/column metadata.
+
+## Deprecated Tags
+
+The following legacy tags are removed in favor of universal text attributes:
+
+- `<b>`, `<u>`, `<strike>`
+- `<center>`, `<left>`, `<right>`
+- `<color>`, `<font>`
+- `<rotate>`, `<upside-down>`
+- `<i_text>`
+- `<line-spacing>`, `<reset-spacing>`
+
+Use `<text ...attributes...>` instead.
+
+## Development
+
+```bash
+npm run build
+npm test
 ```
 
 ## License

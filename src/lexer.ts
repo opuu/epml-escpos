@@ -1,22 +1,21 @@
-import { EPMLSyntaxError } from "./errors";
+import { EPMLSyntaxError } from "./errors.js";
 
-export enum TokenType {
-  TagOpen = "TagOpen", // <name
-  TagClose = "TagClose", // </name>
-  TagEnd = "TagEnd", // >
-  SelfClosingTag = "SelfClosingTag", // />
-  AttributeName = "AttributeName",
-  AttributeValue = "AttributeValue",
-  Text = "Text",
-  Variable = "Variable", // {{ var }}
-  EOF = "EOF",
-}
+export type TokenType =
+  | "TagOpen"
+  | "TagClose"
+  | "TagEnd"
+  | "SelfClosingTag"
+  | "AttributeName"
+  | "AttributeValue"
+  | "Text"
+  | "Variable"
+  | "EOF";
 
 export interface Token {
-  type: TokenType;
-  value: string;
-  line: number;
-  column: number;
+  readonly type: TokenType;
+  readonly value: string;
+  readonly line: number;
+  readonly column: number;
 }
 
 export class Lexer {
@@ -24,7 +23,7 @@ export class Lexer {
   private line = 1;
   private col = 1;
 
-  constructor(private input: string) {}
+  constructor(private readonly input: string) {}
 
   private peek(offset = 0): string {
     return this.pos + offset < this.input.length
@@ -44,10 +43,13 @@ export class Lexer {
     return char;
   }
 
-  private skipWhitespace() {
+  private skipWhitespace(): boolean {
+    let skipped = false;
     while (/\s/.test(this.peek())) {
       this.advance();
+      skipped = true;
     }
+    return skipped;
   }
 
   public tokenize(): Token[] {
@@ -98,7 +100,7 @@ export class Lexer {
               name += this.advance();
             }
             tokens.push({
-              type: TokenType.TagClose,
+              type: "TagClose",
               value: name,
               line: startLine,
               column: startCol,
@@ -114,7 +116,7 @@ export class Lexer {
             }
             if (name) {
               tokens.push({
-                type: TokenType.TagOpen,
+                type: "TagOpen",
                 value: name,
                 line: startLine,
                 column: startCol,
@@ -122,7 +124,7 @@ export class Lexer {
               inTag = true;
             } else {
               tokens.push({
-                type: TokenType.Text,
+                type: "Text",
                 value: "<",
                 line: startLine,
                 column: startCol,
@@ -153,7 +155,7 @@ export class Lexer {
             );
           }
           tokens.push({
-            type: TokenType.Variable,
+            type: "Variable",
             value: v.trim(),
             line: startLine,
             column: startCol,
@@ -170,12 +172,15 @@ export class Lexer {
             text += this.advance();
           }
           if (text.length > 0) {
-            tokens.push({
-              type: TokenType.Text,
-              value: text,
-              line: startLine,
-              column: startCol,
-            });
+            // Discard purely formatting whitespace (e.g. indentation and newlines between tags)
+            if (!(text.trim() === "" && text.includes("\n"))) {
+              tokens.push({
+                type: "Text",
+                value: text,
+                line: startLine,
+                column: startCol,
+              });
+            }
           }
         }
       } else {
@@ -190,7 +195,7 @@ export class Lexer {
           this.advance();
           this.advance();
           tokens.push({
-            type: TokenType.SelfClosingTag,
+            type: "SelfClosingTag",
             value: "/>",
             line: startLine,
             column: startCol,
@@ -199,13 +204,22 @@ export class Lexer {
         } else if (this.peek() === ">") {
           this.advance();
           tokens.push({
-            type: TokenType.TagEnd,
+            type: "TagEnd",
             value: ">",
             line: startLine,
             column: startCol,
           });
           inTag = false;
-        } else if (/[a-zA-Z0-9_\-]/.test(this.peek())) {
+        } else if (/[a-zA-Z0-9_\-]/i.test(this.peek())) {
+          const charBefore = this.input[this.pos - 1];
+          if (charBefore !== undefined && !/\s/.test(charBefore)) {
+            throw new EPMLSyntaxError(
+              "Missing space between attributes",
+              startLine,
+              startCol,
+            );
+          }
+
           let attrName = "";
           while (
             this.pos < this.input.length &&
@@ -214,7 +228,7 @@ export class Lexer {
             attrName += this.advance();
           }
           tokens.push({
-            type: TokenType.AttributeName,
+            type: "AttributeName",
             value: attrName,
             line: startLine,
             column: startCol,
@@ -236,7 +250,14 @@ export class Lexer {
               while (this.pos < this.input.length && this.peek() !== quote) {
                 attrVal += this.advance();
               }
-              if (this.pos < this.input.length) this.advance();
+              if (this.pos < this.input.length)
+                this.advance(); // consume closing quote
+              else
+                throw new EPMLSyntaxError(
+                  "Unclosed attribute value string literal",
+                  valLine,
+                  valCol,
+                );
             } else {
               while (
                 this.pos < this.input.length &&
@@ -246,20 +267,24 @@ export class Lexer {
               }
             }
             tokens.push({
-              type: TokenType.AttributeValue,
+              type: "AttributeValue",
               value: attrVal,
               line: valLine,
               column: valCol,
             });
           }
         } else {
-          this.advance(); // skip unexpected char inside tag to prevent loop
+          throw new EPMLSyntaxError(
+            `Unexpected character '${this.peek()}' in tag`,
+            startLine,
+            startCol,
+          );
         }
       }
     }
 
     tokens.push({
-      type: TokenType.EOF,
+      type: "EOF",
       value: "",
       line: this.line,
       column: this.col,

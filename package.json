@@ -44,7 +44,11 @@
   ],
   "author": "opuu",
   "license": "MIT",
+  "dependencies": {
+    "jimp": "^1.6.0"
+  },
   "devDependencies": {
+    "@types/node": "^25.3.5",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
   }
