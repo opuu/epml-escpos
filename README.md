@@ -151,28 +151,28 @@ HTML comments are supported and ignored by the lexer (`<!-- comment -->`).
 
 These are accepted on text-capable tags such as `<text>`, `<cell>`, `<row>`, and `<receipt>`.
 
-| Attribute | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `align` | `left \| center \| right` | `left` | Text alignment |
-| `bold` | boolean | `false` | |
-| `underline` | boolean | `false` | |
-| `strike` | boolean | `false` | |
-| `invert` | boolean | `false` | White-on-black mode |
-| `rotate` | boolean | `false` | |
-| `upside-down` | boolean | `false` | |
-| `color` | `black \| red` | `black` | Profile-dependent |
-| `font` | `a \| b` | `a` | |
-| `size` | number | `1` | Uniform X/Y scale |
-| `size-x` | number | `1` | Horizontal scale override |
-| `size-y` | number | `1` | Vertical scale override |
-| `charset` | string | - | Must be supported by profile |
-| `smoothing` | boolean | `false` | Profile-dependent |
-| `padding` | boolean | `false` | Fill remaining width with `padding-char` |
-| `full-width` | boolean | `false` | Similar to padding behavior for text blocks |
-| `inline` | boolean | `false` | Prevent automatic trailing LF for `<text>` |
-| `padding-char` | string | space | First byte is used |
-| `padding-top` | number | `0` | Adds filled blank lines before content |
-| `padding-bottom` | number | `0` | Adds filled blank lines after content |
+| Attribute        | Type                      | Default | Notes                                       |
+| ---------------- | ------------------------- | ------- | ------------------------------------------- |
+| `align`          | `left \| center \| right` | `left`  | Text alignment                              |
+| `bold`           | boolean                   | `false` |                                             |
+| `underline`      | boolean                   | `false` |                                             |
+| `strike`         | boolean                   | `false` |                                             |
+| `invert`         | boolean                   | `false` | White-on-black mode                         |
+| `rotate`         | boolean                   | `false` |                                             |
+| `upside-down`    | boolean                   | `false` |                                             |
+| `color`          | `black \| red`            | `black` | Profile-dependent                           |
+| `font`           | `a \| b`                  | `a`     |                                             |
+| `size`           | number                    | `1`     | Uniform X/Y scale                           |
+| `size-x`         | number                    | `1`     | Horizontal scale override                   |
+| `size-y`         | number                    | `1`     | Vertical scale override                     |
+| `charset`        | string                    | -       | Must be supported by profile                |
+| `smoothing`      | boolean                   | `false` | Profile-dependent                           |
+| `padding`        | boolean                   | `false` | Fill remaining width with `padding-char`    |
+| `full-width`     | boolean                   | `false` | Similar to padding behavior for text blocks |
+| `inline`         | boolean                   | `false` | Prevent automatic trailing LF for `<text>`  |
+| `padding-char`   | string                    | space   | First byte is used                          |
+| `padding-top`    | number                    | `0`     | Adds filled blank lines before content      |
+| `padding-bottom` | number                    | `0`     | Adds filled blank lines after content       |
 
 ### Tag-Specific Attributes
 
