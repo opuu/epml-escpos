@@ -1,6 +1,6 @@
 {
   "name": "@opuu/epml-escpos",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "description": "An XML-style templating language compiler for ESC/POS thermal printers. Transform markup templates and JSON data into raw byte arrays.",
   "main": "dist/index.js",
