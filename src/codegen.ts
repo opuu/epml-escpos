@@ -7,6 +7,7 @@ import {
 import { EPMLPluginError, EPMLCodegenError } from "./errors.js";
 import { EPMLPlugin, CommandMap } from "./plugin.js";
 import * as CMD from "./commands/index.js";
+import { encodeText, normalizeCharset } from "./encoding.js";
 
 export class CodeGenerator {
   private warnings: EPMLWarning[] = [];
@@ -53,21 +54,29 @@ export class CodeGenerator {
     return c;
   }
 
-  private processNodesSync(nodes: readonly ASTNode[]): any {
+  private processNodesSync(
+    nodes: readonly ASTNode[],
+    activeCharset: string = "PC437",
+  ): any {
     let result: any = new Uint8Array();
     for (const node of nodes) {
       if (node.type === "Text") {
-        const encoder = new TextEncoder();
-        result = this.concat(result, encoder.encode(node.value || ""));
+        result = this.concat(
+          result,
+          encodeText(node.value || "", activeCharset),
+        );
       } else if (node.type === "Raw") {
         result = this.concat(result, node.data);
       } else if (node.type === "Element") {
-        result = this.concat(result, this.processElementSync(node));
+        result = this.concat(
+          result,
+          this.processElementSync(node, activeCharset),
+        );
       } else {
         if ((node as any).children) {
           result = this.concat(
             result,
-            this.processNodesSync((node as any).children),
+            this.processNodesSync((node as any).children, activeCharset),
           );
         }
       }
@@ -75,21 +84,29 @@ export class CodeGenerator {
     return result;
   }
 
-  private async processNodesAsync(nodes: readonly ASTNode[]): Promise<any> {
+  private async processNodesAsync(
+    nodes: readonly ASTNode[],
+    activeCharset: string = "PC437",
+  ): Promise<any> {
     let result: any = new Uint8Array();
     for (const node of nodes) {
       if (node.type === "Text") {
-        const encoder = new TextEncoder();
-        result = this.concat(result, encoder.encode(node.value || ""));
+        result = this.concat(
+          result,
+          encodeText(node.value || "", activeCharset),
+        );
       } else if (node.type === "Raw") {
         result = this.concat(result, node.data);
       } else if (node.type === "Element") {
-        result = this.concat(result, await this.processElementAsync(node));
+        result = this.concat(
+          result,
+          await this.processElementAsync(node, activeCharset),
+        );
       } else {
         if ((node as any).children) {
           result = this.concat(
             result,
-            await this.processNodesAsync((node as any).children),
+            await this.processNodesAsync((node as any).children, activeCharset),
           );
         }
       }
@@ -97,20 +114,57 @@ export class CodeGenerator {
     return result;
   }
 
-  private processElementSync(node: any): any {
+  private processElementSync(node: any, inheritedCharset: string): any {
+    const elementCharset = this.resolveElementCharset(
+      node.attributes,
+      inheritedCharset,
+    );
     return this.sharedElementProcess(
       node,
-      this.processNodesSync(node.children),
+      this.processNodesSync(node.children, elementCharset),
       false,
+      inheritedCharset,
+      elementCharset,
     );
   }
 
-  private async processElementAsync(node: any): Promise<any> {
+  private async processElementAsync(
+    node: any,
+    inheritedCharset: string,
+  ): Promise<any> {
+    const elementCharset = this.resolveElementCharset(
+      node.attributes,
+      inheritedCharset,
+    );
     return this.sharedElementProcess(
       node,
-      await this.processNodesAsync(node.children),
+      await this.processNodesAsync(node.children, elementCharset),
       true,
+      inheritedCharset,
+      elementCharset,
     );
+  }
+
+  private resolveElementCharset(
+    attrs: Record<string, unknown> | undefined,
+    inheritedCharset: string,
+  ): string {
+    const requested =
+      typeof attrs?.charset === "string" ? normalizeCharset(attrs.charset) : "";
+
+    if (!requested) {
+      return inheritedCharset;
+    }
+
+    if (!this.commands.text.charset) {
+      return inheritedCharset;
+    }
+
+    if (CMD.CharsetMap[requested] === undefined) {
+      return inheritedCharset;
+    }
+
+    return requested;
   }
 
   private getVisibleLength(node: any, inheritedScaleX = 1): number {
@@ -136,6 +190,8 @@ export class CodeGenerator {
     node: any,
     childBytes: any,
     isAsyncCall: boolean,
+    inheritedCharset: string,
+    activeCharset: string,
   ): any {
     const attrs: any = node.attributes || {};
     let result: any = new Uint8Array();
@@ -241,12 +297,16 @@ export class CodeGenerator {
         }
       }
       if (attrs.charset) {
-        const cp = CMD.CharsetMap[attrs.charset.toUpperCase()] ?? null;
+        const requested = normalizeCharset(String(attrs.charset));
+        const cp = CMD.CharsetMap[requested] ?? null;
         if (cp !== null) {
           if (t.charset) {
             try {
               start = this.concat(start, t.charset(cp));
-              end = this.concat(end, t.charset(0));
+              end = this.concat(
+                end,
+                t.charset(CMD.CharsetMap[inheritedCharset] ?? 0),
+              );
             } catch (e: any) {
               throw new EPMLPluginError(e.message, "CommandMap:charset");
             }
@@ -288,7 +348,7 @@ export class CodeGenerator {
         typeof attrs["padding-char"] === "string" && attrs["padding-char"]
           ? attrs["padding-char"]
           : " ";
-      const padByte = new TextEncoder().encode(padChar)[0] || 0x20;
+      const padByte = encodeText(padChar, activeCharset)[0] || 0x20;
       for (let i = 0; i < lines; i++) {
         if (shouldFill) {
           const fillChars = Math.floor(this.receiptWidth / nodeScaleX);
@@ -342,7 +402,7 @@ export class CodeGenerator {
         break;
       case "hr":
         const str = "-".repeat(this.receiptWidth);
-        result = this.concat(result, new TextEncoder().encode(str + "\n"));
+        result = this.concat(result, encodeText(str + "\n", activeCharset));
         break;
       case "text":
         let textBytes = childBytes;
@@ -352,7 +412,7 @@ export class CodeGenerator {
             Math.max(0, this.receiptWidth - tVisLen) / nodeScaleX,
           );
           const tPadChar = attrs["padding-char"] || " ";
-          const tpc = new TextEncoder().encode(tPadChar)[0] || 0x20;
+          const tpc = encodeText(String(tPadChar), activeCharset)[0] || 0x20;
 
           let tLeftPad = 0,
             tRightPad = 0;
@@ -396,7 +456,7 @@ export class CodeGenerator {
           Math.max(0, cellWidth - cellVisLen) / nodeScaleX,
         );
         const cellPadChar = attrs["padding-char"] || " ";
-        const cpc = new TextEncoder().encode(cellPadChar)[0] || 0x20;
+        const cpc = encodeText(String(cellPadChar), activeCharset)[0] || 0x20;
 
         let cLeftPad = 0,
           cRightPad = 0;

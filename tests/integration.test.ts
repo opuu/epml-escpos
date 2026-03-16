@@ -52,6 +52,25 @@ describe("EPMLCompiler Integration", () => {
     expect(r.bytes.length).toBeGreaterThan(5); // ESC cmds + Hello
   });
 
+  test("encodes accented letters with selected WPC1252 charset", () => {
+    const tmpl = `<text charset="WPC1252">áéíóúñçü</text>`;
+    const res = EPMLCompiler.compile(tmpl, {});
+
+    expect(Array.from(res.bytes)).toEqual([
+      0x1b, 0x74, 16, 0xe1, 0xe9, 0xed, 0xf3, 0xfa, 0xf1, 0xe7, 0xfc, 0x0a,
+      0x1b, 0x74, 0x00,
+    ]);
+  });
+
+  test("restores previous charset after scoped charset element", () => {
+    const tmpl = `<receipt width="48" init="false"><text charset="WPC1252">é</text><text>é</text></receipt>`;
+    const res = EPMLCompiler.compile(tmpl, {});
+
+    expect(Array.from(res.bytes)).toEqual([
+      0x1b, 0x74, 16, 0xe9, 0x0a, 0x1b, 0x74, 0x00, 0x82, 0x0a,
+    ]);
+  });
+
   test("handles unrolled conditional rendering", () => {
     const tmpl = `<if condition="show">YES<else/>NO</if>`;
     const resA = EPMLCompiler.compile(tmpl, { show: true });
