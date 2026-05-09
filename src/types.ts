@@ -71,11 +71,15 @@ export interface CompileOptions {
   plugins?: EPMLPlugin[];
   strict?: boolean;
   image?: ImageRenderOptions;
+  /** Default chunk size for `CompileResult.chunks()`. Useful for printers with small receive buffers (cheap USB, serial, Bluetooth). */
+  chunkSize?: number;
 }
 
 export interface CompileResult {
   bytes: Uint8Array;
   warnings: EPMLWarning[];
+  /** Yields fixed-size views of `bytes`. Pass a size or rely on the `chunkSize` compile option. */
+  chunks(size?: number): Generator<Uint8Array>;
 }
 
 export * from "./profiles/types.js";

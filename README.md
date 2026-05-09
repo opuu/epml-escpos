@@ -96,6 +96,28 @@ socket.connect(9100, "192.168.1.50", () => {
 });
 ```
 
+## Chunked Sending
+
+Some printers, including many cheap USB, serial, and Bluetooth models have small
+receive buffers. Sending the full byte stream at once can overflow the buffer and produce
+a truncated receipt. Use `chunks()` to send in fixed-size pieces.
+
+```ts
+const result = EPMLCompiler.compile(template, data, profile, { chunkSize: 512 });
+
+for (const chunk of result.chunks()) {
+  await sendToPrinter(chunk);
+}
+```
+
+You can also pass a size directly to `chunks()` to override the compile-time default:
+
+```ts
+for (const chunk of result.chunks(256)) {
+  await sendToPrinter(chunk);
+}
+```
+
 ## Template Language
 
 ### Data Interpolation
@@ -257,8 +279,13 @@ EPMLCompiler.compile(template, data, undefined, {
 interface CompileResult {
   bytes: Uint8Array;
   warnings: EPMLWarning[];
+  chunks(size?: number): Generator<Uint8Array>;
 }
 ```
+
+`chunks()` yields zero-copy `Uint8Array` views of `bytes`. The optional `size` overrides
+the `chunkSize` set in `CompileOptions`. When neither is set, a single chunk with the
+full buffer is returned.
 
 ## Errors and Warnings
 

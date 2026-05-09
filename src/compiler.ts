@@ -84,7 +84,11 @@ export class EPMLCompiler {
     );
 
     const res = generator.generate();
-    return { bytes: res.bytes, warnings: [...warnings, ...res.warnings] };
+    return EPMLCompiler.buildResult(
+      res.bytes,
+      [...warnings, ...res.warnings],
+      options?.chunkSize,
+    );
   }
 
   /**
@@ -157,7 +161,11 @@ export class EPMLCompiler {
       w,
     );
     const res = await generator.generateAsync();
-    return { bytes: res.bytes, warnings: [...warnings, ...res.warnings] };
+    return EPMLCompiler.buildResult(
+      res.bytes,
+      [...warnings, ...res.warnings],
+      options?.chunkSize,
+    );
   }
 
   private static async resolveImages(
@@ -277,6 +285,24 @@ export class EPMLCompiler {
       }
     }
     return result;
+  }
+
+  private static buildResult(
+    bytes: Uint8Array,
+    warnings: EPMLWarning[],
+    defaultChunkSize?: number,
+  ): CompileResult {
+    return {
+      bytes,
+      warnings,
+      chunks: function* (size?: number): Generator<Uint8Array> {
+        const sz = size ?? defaultChunkSize ?? bytes.length;
+        if (sz <= 0 || bytes.length === 0) return;
+        for (let offset = 0; offset < bytes.length; offset += sz) {
+          yield bytes.subarray(offset, offset + sz);
+        }
+      },
+    };
   }
 
   private static compactDataUrl(value: string): string {
