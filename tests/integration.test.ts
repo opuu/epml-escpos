@@ -283,3 +283,88 @@ describe("EPMLCompiler Integration", () => {
     }
   });
 });
+
+describe("CompileResult.chunks()", () => {
+  const template = `<receipt width="48" init="true"><text>Hello BT Printer</text><cut mode="partial"/></receipt>`;
+
+  test("no args returns single chunk matching full buffer", () => {
+    const result = EPMLCompiler.compile(template, {});
+    const chunks = [...result.chunks()];
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toEqual(result.bytes);
+    expect(chunks[0].buffer).toBe(result.bytes.buffer);
+  });
+
+  test("splits into chunks no larger than requested size", () => {
+    const result = EPMLCompiler.compile(template, {});
+    const size = 16;
+    const chunks = [...result.chunks(size)];
+
+    const expectedCount = Math.ceil(result.bytes.length / size);
+    expect(chunks).toHaveLength(expectedCount);
+
+    for (let i = 0; i < chunks.length - 1; i++) {
+      expect(chunks[i].byteLength).toBe(size);
+    }
+    expect(chunks[chunks.length - 1].byteLength).toBeLessThanOrEqual(size);
+  });
+
+  test("reassembled chunks equal the original bytes", () => {
+    const result = EPMLCompiler.compile(template, {});
+    const chunks = [...result.chunks(20)];
+
+    const totalLen = chunks.reduce((s, c) => s + c.byteLength, 0);
+    const reassembled = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const c of chunks) {
+      reassembled.set(c, offset);
+      offset += c.byteLength;
+    }
+
+    expect(reassembled).toEqual(result.bytes);
+  });
+
+  test("chunkSize option sets default chunk size", () => {
+    const defaultSize = 8;
+    const result = EPMLCompiler.compile(template, {}, undefined, {
+      chunkSize: defaultSize,
+    });
+    const chunks = [...result.chunks()];
+
+    expect(chunks.length).toBeGreaterThan(1);
+    for (let i = 0; i < chunks.length - 1; i++) {
+      expect(chunks[i].byteLength).toBe(defaultSize);
+    }
+  });
+
+  test("per-call size overrides chunkSize option", () => {
+    const result = EPMLCompiler.compile(template, {}, undefined, {
+      chunkSize: 8,
+    });
+    const chunksOverride = [...result.chunks(64)];
+    const chunksDefault = [...result.chunks()];
+
+    expect(chunksOverride.length).toBeLessThan(chunksDefault.length);
+  });
+
+  test("empty output yields no bytes", () => {
+    const result = EPMLCompiler.compile(
+      `<receipt width="48" init="false"></receipt>`,
+      {},
+    );
+    const chunks = [...result.chunks(16)];
+    const totalBytes = chunks.reduce((s, c) => s + c.byteLength, 0);
+    expect(totalBytes).toBe(result.bytes.length);
+  });
+
+  test("compileAsync result exposes chunks()", async () => {
+    const result = await EPMLCompiler.compileAsync(template, {});
+    const chunks = [...result.chunks(64)];
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+
+    const totalLen = chunks.reduce((s, c) => s + c.byteLength, 0);
+    expect(totalLen).toBe(result.bytes.length);
+  });
+});
+
