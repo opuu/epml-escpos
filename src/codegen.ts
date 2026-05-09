@@ -1,7 +1,6 @@
 import {
   ASTNode,
   CompileOptions,
-  CompileResult,
   EPMLWarning,
 } from "./types.js";
 import { EPMLPluginError, EPMLCodegenError } from "./errors.js";
@@ -34,13 +33,13 @@ export class CodeGenerator {
     this.warnings.push({ message, stage: "plugin" });
   }
 
-  public generate(): CompileResult {
+  public generate(): { bytes: Uint8Array; warnings: EPMLWarning[] } {
     let result: any = new Uint8Array();
     result = this.concat(result, this.processNodesSync(this.ast));
     return { bytes: result as Uint8Array, warnings: this.warnings };
   }
 
-  public async generateAsync(): Promise<CompileResult> {
+  public async generateAsync(): Promise<{ bytes: Uint8Array; warnings: EPMLWarning[] }> {
     let result: any = new Uint8Array();
     result = this.concat(result, await this.processNodesAsync(this.ast));
     return { bytes: result as Uint8Array, warnings: this.warnings };
