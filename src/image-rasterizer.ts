@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { EPMLCodegenError } from "./errors.js";
 import { ImageDitherMode, ImageRenderOptions, RasterizerFn } from "./types.js";
 
@@ -54,7 +53,9 @@ async function loadSourceBuffer(source: string): Promise<Buffer> {
   }
 
   try {
-    return await readFile(trimmed);
+    // Lazy dynamic import to prevent client side errors
+    const { readFile: readFileFn } = await import("node:fs/promises");
+    return await readFileFn(trimmed);
   } catch (error: any) {
     throw new EPMLCodegenError(
       `Failed to read image file '${trimmed}': ${error?.message || String(error)}`,
