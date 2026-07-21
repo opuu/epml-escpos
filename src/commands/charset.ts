@@ -1,4 +1,5 @@
 export const ESC = 0x1b;
+export const FS = 0x1c;
 
 export const CharsetMap: Record<string, number> = {
   PC437: 0,
@@ -22,5 +23,5 @@ export const CharsetMap: Record<string, number> = {
 };
 
 export const CHARSET = {
-  setPage: (n: number) => [ESC, 0x74, n],
+  setPage: (n: number) => [FS, 0x2e, ESC, 0x74, n],
 };
